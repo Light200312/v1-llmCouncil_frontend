@@ -1,91 +1,48 @@
-
-import { Context } from '../../context/Context'
+import { Context } from "../../context/Context";
 import ReactMarkdown from "react-markdown";
-import { useEffect, useState, useContext } from 'react';
-import { Menu, Plus, MessageCircle, HelpCircle, History, Settings, Compass, Lightbulb, Code, User, Image, Mic, Send, Sparkles } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
+import remarkGfm from "remark-gfm";
+import { useEffect, useState, useContext } from "react";
+import { Image, Mic, Send, Sparkles, Copy } from "lucide-react";
+import { assets } from "../../assets/assets";
 
 const Main = () => {
     const {
-        onSent,
-        prevPrompts,
-        showResult,
-        loading,
-        resultData,
-        setInput,
         input,
-        recentPrompt,
-        setImage,
-        image,
+        setInput,
+        currentChat,
+        showResult,
+        setShowResult,
+        loading,
+        onSent,
     } = useContext(Context);
 
     const [listening, setListening] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null);
     const [speaking, setSpeaking] = useState(false);
 
-
-
-
-
-    console.log("🧪 showResult:", showResult);
-    console.log("🧪 loading:", loading);
-    console.log("🧪 resultData:", resultData);
-
-    const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setImage(reader.result); // base64 string
-        };
-        reader.readAsDataURL(file);
-    };
-
+    /* 🎤 Voice */
     const startListening = () => {
         const SpeechRecognition =
             window.SpeechRecognition || window.webkitSpeechRecognition;
 
-        if (!SpeechRecognition) {
-            alert("Speech Recognition not supported in this browser");
-            return;
-        }
+        if (!SpeechRecognition) return alert("Speech not supported");
 
         const recognition = new SpeechRecognition();
-
         recognition.lang = "en-US";
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
         recognition.start();
 
-        recognition.onstart = () => {
-            console.log("🎤 Listening...");
-            setListening(true);
+        setListening(true);
 
-        };
-
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            console.log("Voice Input:", transcript);
-
-            setInput(transcript);   // ✅ fills input box
-            onSent(transcript);     // ✅ sends prompt immediately
-        };
-
-        recognition.onerror = (event) => {
-            console.error("Speech recognition error:", event.error);
-        };
-
-        recognition.onend = () => {
-            console.log("🎤 Stopped Listening");
+        recognition.onresult = (e) => {
+            setInput(e.results[0][0].transcript);
             setListening(false);
-
         };
+
+        recognition.onend = () => setListening(false);
     };
 
-
+    /* 🔊 Speak */
     const speakText = (text) => {
-        
         if (!window.speechSynthesis) return;
 
         if (speechSynthesis.speaking) {
@@ -95,178 +52,279 @@ const Main = () => {
         }
 
         const utterance = new SpeechSynthesisUtterance(text);
-
         utterance.onstart = () => setSpeaking(true);
         utterance.onend = () => setSpeaking(false);
-        speechSynthesis.cancel();
+
         speechSynthesis.speak(utterance);
     };
 
+    /* 📋 Copy */
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+    };
 
+    const copyFullChat = () => {
+        const fullText = currentChat.messages
+            .map((m) => `${m.role.toUpperCase()}:\n${m.text}`)
+            .join("\n\n");
+        navigator.clipboard.writeText(fullText);
+    };
+
+    /* 🖼 Image */
+    const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => setSelectedImage(reader.result);
+        reader.readAsDataURL(file);
+    };
+
+    /* 🔥 Auto Scroll */
     useEffect(() => {
-        if (!loading && resultData) {
-            speakText(resultData);
+        const chatContainer = document.getElementById("chat-container");
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-    }, [loading]);
-
-
-
-
-
+    }, [currentChat, loading]);
 
     return (
         <div className="flex-1 h-screen bg-white dark:bg-slate-950 dark:text-gray-100 flex flex-col">
-            <div className="flex items-center justify-between font-semibold text-xl md:text-2xl p-4 md:p-6 md:pr-2.5 text-gray-500 dark:text-gray-300">
-                <p>LLM Council</p>
-                <User size={32} className="md:w-9 rounded-full" />
-            </div>
-            <div className="flex-1 overflow-y-auto hide-scrollbar">
-                <div className={showResult ? "w-full " : "max-w-4xl mx-auto px-4 md:px-0"}>
-                    {!showResult ?
-                        <>
-                            <div className="mt-8 md:mt-12 animate-fadeUp">
-                                <p><span className="text-3xl md:text-5xl font-bold leading-tight bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-clip-text text-transparent animate-gradient">Hello, User.</span></p>
-                                <p className="text-xl md:text-3xl font-medium text-gray-700 dark:text-gray-300 mt-2 md:mt-3.5 leading-relaxed">How can <span className="text-blue-500">We</span> help you today?</p>
-                            </div>
-                            {/* input suggestions */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 mt-8 md:mt-12 pb-80">
-                                <div 
-                                    onClick={() => onSent("Suggest beautiful places to see in an upcoming road trip")}
-                                    className="bg-gray-100 dark:bg-slate-800 rounded-2xl p-4 md:p-5 min-h-32 flex flex-col justify-between cursor-pointer hover:bg-gray-200 dark:hover:bg-slate-700 transition">
-                                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200 leading-relaxed">Suggest beautiful places to see in an upcoming road trip</p>
-                                    <Compass size={24} className="opacity-80" />
-                                </div>
-                                <div 
-                                    onClick={() => onSent("Briefly summarize this concept: urban planning")}
-                                    className="bg-gray-100 dark:bg-slate-800 rounded-2xl p-4 md:p-5 min-h-32 flex flex-col justify-between cursor-pointer hover:bg-gray-200 dark:hover:bg-slate-700 transition">
-                                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200 leading-relaxed">Briefly summarize this concept: urban planning</p>
-                                    <Lightbulb size={24} className="opacity-80" />
-                                </div>
-                                <div 
-                                    onClick={() => onSent("Brainstorm team bonding activities for our work retreat")}
-                                    className="bg-gray-100 dark:bg-slate-800 rounded-2xl p-4 md:p-5 min-h-32 flex flex-col justify-between cursor-pointer hover:bg-gray-200 dark:hover:bg-slate-700 transition">
-                                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200 leading-relaxed">Brainstorm team bonding activities for our work retreat</p>
-                                    <MessageCircle size={24} className="opacity-80" />
-                                </div>
-                                <div 
-                                    onClick={() => onSent("Improve the readability of the following code")}
-                                    className="bg-gray-100 dark:bg-slate-800 rounded-2xl p-4 md:p-5 min-h-32 flex flex-col justify-between cursor-pointer hover:bg-gray-200 dark:hover:bg-slate-700 transition">
-                                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200 leading-relaxed">Improve the readability of the following code</p>
-                                    <Code size={24} className="opacity-80" />
-                                </div>
-                            </div>
-                        </>
-                        : <div className='py-4 md:py-5 px-6 md:px-32 pb-80 max-w-7xl mx-auto'>
-                            <div className="my-8 md:my-10 flex items-center gap-4 md:gap-5">
-                                <User size={36} className="md:w-10 rounded-full" />
-                                <p className="text-sm md:text-base text-gray-700 dark:text-gray-300">{recentPrompt}</p>
-                            </div>
-                            <div className="flex w-fit  flex-col items-start gap-3 leading-relaxed text-sm md:text-base text-gray-800 dark:text-gray-200">
-                              
-                              <div className='flex gap-2'>
-                                 <button onClick={() => speakText(resultData)} className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition mb-2 text-sm md:text-base">
-                                    {speaking ? "⏹ Stop" : "🔊 Speak"}
-                                </button>
 
-                                <Sparkles size={32} className="md:w-10" />
-                                </div>  
-                               
-                                {loading ? (
-                                    <div className='w-full flex flex-col gap-4'>
-                                        <div className="h-5 bg-gray-200 dark:bg-slate-800 rounded animate-pulse w-full"></div>
-                                        <div className="h-5 bg-gray-200 dark:bg-slate-800 rounded animate-pulse w-3/4"></div>
-                                        <div className="h-5 bg-gray-200 dark:bg-slate-800 rounded animate-pulse w-1/2"></div>
-                                    </div>
-                                ) : (
-                                    /* ✅ FIXED MARKDOWN CONTAINER */
-                                    <div className="w-full prose prose-xl md:prose-2xl dark:prose-invert max-w-none 
-                                        prose-table:border prose-table:border-gray-300 dark:prose-table:border-gray-700
-                                        prose-th:bg-gray-100 dark:prose-th:bg-slate-800 prose-th:p-3
-                                        prose-td:p-3 prose-td:border-t prose-td:border-gray-200 dark:prose-td:border-gray-700
-                                        prose-p:leading-loose prose-pre:bg-slate-900 prose-pre:p-4">
-                                        
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                            {resultData}
-                                        </ReactMarkdown>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    }
+            {/* HEADER */}
+            <div className="flex items-center justify-between font-semibold text-xl md:text-2xl p-4 text-gray-500 dark:text-gray-300">
+                <p
+                    onClick={() => setShowResult(false)}
+                    className="cursor-pointer hover:opacity-70 transition"
+                >
+                    LLM Council
+                </p>
+
+                <div className="flex items-center gap-4">
+                    {showResult && (
+                        <Copy
+                            size={20}
+                            className="cursor-pointer hover:text-blue-500"
+                            onClick={copyFullChat}
+                            title="Copy Full Chat"
+                        />
+                    )}
+
+                    <img
+                        src={assets.user_icon}
+                        alt="User"
+                        className="w-9 h-9 rounded-full object-cover border border-gray-300 dark:border-slate-600"
+                    />
                 </div>
             </div>
 
-            <div className="p-4 md:p-5 w-full">
-                <div className="flex flex-col gap-2 bg-gray-200 dark:bg-slate-800 p-3 md:p-4 rounded-3xl">
-                    {image && (
-                        <div className="flex gap-2 p-1 overflow-x-auto">
-                            <div className="flex justify-start relative w-fit flex-shrink-0">
-                                <img src={image} alt="preview" className="w-28 h-28 md:w-32 md:h-32 object-cover rounded-2xl border-2 border-gray-300 dark:border-gray-600 shadow-md hover:scale-105 transition" />
-                                <button
-                                    className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 dark:bg-red-600 text-white cursor-pointer font-bold flex items-center justify-center hover:bg-red-600 dark:hover:bg-red-700 transition"
-                                    onClick={() => setImage(null)}
-                                    title="Remove image"
+            {/* CHAT */}
+            <div
+                id="chat-container"
+                className="flex-1 overflow-y-auto px-4 md:px-32 pb-20"
+            >
+                {!showResult ? (
+                    <div className="mt-16">
+                        <p className="text-4xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 bg-clip-text text-transparent">
+                            Hello, User 👋
+                        </p>
+                        <p className="text-xl text-gray-600 dark:text-gray-300 mt-3">
+                            How can we help you today?
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-6 mt-6">
+                        {currentChat?.messages.map((msg, index) => {
+                            const isUser = msg.role === "user";
+
+                            return (
+                                <div
+                                    key={index}
+                                    className={`flex items-end gap-3 ${isUser ? "justify-end" : "justify-start"
+                                        }`}
                                 >
-                                    ✕
-                                </button>
+                                    {!isUser && (
+                                        <div className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700">
+                                            <Sparkles size={18} />
+                                        </div>
+                                    )}
+
+                                    <div
+                                        className={`relative max-w-xl px-4 py-3 rounded-2xl shadow-sm ${isUser
+                                            ? "bg-blue-500 text-white rounded-br-none"
+                                            : "bg-gray-200 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-bl-none"
+                                            }`}
+                                    >
+                                        {msg.image && (
+                                            <img
+                                                src={msg.image}
+                                                alt="uploaded"
+                                                className="w-40 rounded-xl mb-2"
+                                            />
+                                        )}
+
+                                        {isUser ? (
+                                            <p>{msg.text}</p>
+                                        ) : (
+                                            <>
+                                                {/* Copy Message */}
+                                                <Copy
+                                                    size={16}
+                                                    className="absolute top-2 right-2 cursor-pointer opacity-60 hover:opacity-100"
+                                                    onClick={() => copyToClipboard(msg.text)}
+                                                />
+
+                                                <button
+                                                    onClick={() => speakText(msg.text)}
+                                                    className="mb-2 text-xs px-2 py-1 bg-blue-500 text-white rounded-lg"
+                                                >
+                                                    {speaking ? "⏹ Stop" : "🔊 Speak"}
+                                                </button>
+                                                <div
+                                                    className="
+  prose dark:prose-invert max-w-none
+  prose-p:leading-relaxed
+  prose-headings:font-semibold
+  prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+  prose-ul:list-disc prose-ul:pl-5
+  prose-ol:list-decimal prose-ol:pl-5
+  prose-li:my-1
+  prose-hr:hidden
+  prose-pre:bg-slate-900 prose-pre:text-white prose-pre:rounded-xl prose-pre:p-4
+  prose-p:text-gray-800 dark:prose-p:text-gray-200
+  prose-code:bg-slate-800 prose-code:text-green-400 prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+  "
+                                                >
+
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            code({ inline, className, children }) {
+                                                                return !inline ? (
+                                                                    <div className="relative">
+                                                                        <Copy
+                                                                            size={14}
+                                                                            className="absolute top-2 right-2 cursor-pointer text-white"
+                                                                            onClick={() =>
+                                                                                copyToClipboard(
+                                                                                    String(children).replace(/\n$/, "")
+                                                                                )
+                                                                            }
+                                                                        />
+                                                                        <pre className="overflow-x-auto">
+                                                                            <code>{children}</code>
+                                                                        </pre>
+                                                                    </div>
+                                                                ) : (
+                                                                    <code>{children}</code>
+                                                                );
+                                                            },
+                                                        }}
+                                                    >
+                                                        {msg.text}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {isUser && (
+                                        <img
+                                            src={assets.user_icon}
+                                            alt="User"
+                                            className="w-9 h-9 rounded-full object-cover border border-gray-300 dark:border-slate-600"
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {loading && (
+                            <div className="flex justify-start items-end gap-3">
+                                <div className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700">
+                                    <Sparkles size={18} />
+                                </div>
+                                <div className="bg-gray-200 dark:bg-slate-800 px-4 py-3 rounded-2xl rounded-bl-none animate-pulse">
+                                    Thinking...
+                                </div>
                             </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* INPUT */}
+            <div className="border-t dark:border-slate-700 p-4 bg-white dark:bg-slate-900">
+                <div className="max-w-4xl mx-auto bg-gray-200 dark:bg-slate-800 rounded-3xl p-3 flex flex-col gap-3">
+
+                    {selectedImage && (
+                        <div className="relative w-fit">
+                            <img
+                                src={selectedImage}
+                                alt="preview"
+                                className="w-32 rounded-xl"
+                            />
+                            <button
+                                onClick={() => setSelectedImage(null)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6"
+                            >
+                                ✕
+                            </button>
                         </div>
                     )}
 
-                    <div className="flex items-center gap-2 md:gap-3">
-                        <input
-                            onChange={(e) => setInput(e.target.value)}
+                    <div className="flex items-center gap-3">
+                        <textarea
                             value={input}
-                            type="text"
+                            onChange={(e) => setInput(e.target.value)}
                             placeholder="Enter a prompt here"
-                            className="flex-1 bg-transparent border-none outline-none p-2 text-base md:text-lg dark:text-white dark:placeholder-gray-400"
+                            rows={1}
+                            className="flex-1 bg-transparent outline-none text-lg resize-none overflow-y-auto max-h-40"
                             onKeyDown={(e) => {
-                                if (e.key === "Enter" && input.trim()) {
-                                    onSent(input);
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault(); // prevent new line
+                                    if (input.trim()) {
+                                        const message = input;
+                                        setInput("");
+                                        onSent(message, selectedImage);
+                                        setSelectedImage(null);
+                                    }
                                 }
+                            }}
+                            onInput={(e) => {
+                                e.target.style.height = "auto";
+                                e.target.style.height = e.target.scrollHeight + "px";
                             }}
                         />
 
-                        <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-                            <label className="cursor-pointer hover:opacity-70 transition">
-                                <Image size={20} className="md:w-6" />
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    hidden
-                                    onChange={handleImageUpload}
-                                />
-                            </label>
+                        <label className="cursor-pointer">
+                            <Image size={22} />
+                            <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
+                        </label>
 
-                            <Mic
-                                size={20}
-                                className="md:w-6 cursor-pointer hover:opacity-70 transition"
-                                onClick={startListening}
-                                style={{
-                                    filter: listening ? "brightness(1.5)" : "none"
-                                }}
-                            />
+                        <Mic
+                            size={22}
+                            className="cursor-pointer"
+                            onClick={startListening}
+                            style={{ opacity: listening ? 0.5 : 1 }}
+                        />
 
-                            {input ? <Send
-                                size={20}
-                                className="md:w-6 cursor-pointer hover:opacity-70 transition"
-                                onClick={() => {
-                                    console.log("✅ Send icon clicked");
-                                    console.log("Input value:", input);
-                                    if (input.trim()) {
-                                        onSent(input);
-                                    }
-                                }}
-                            /> : null}
-                        </div>
+                        <Send
+                            className="cursor-pointer"
+                            onClick={() => {
+                                if (input.trim()) {
+                                    const message = input;
+                                    setInput("");
+                                    onSent(message, selectedImage);
+                                    setSelectedImage(null);
+                                }
+                            }}
+                        />
                     </div>
                 </div>
-                <p className="text-xs md:text-sm my-2 md:my-3 text-center font-light text-gray-600 dark:text-gray-400 px-2">
-                    LLM Council may display inaccurate info, including about people, so double-check its response. Your privacy and LLM Council Apps
-                </p>
             </div>
         </div>
-    )
-}
+    );
+};
 
-export default Main
+export default Main;

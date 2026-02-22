@@ -1,58 +1,59 @@
-/**
- * OpenRouter API utility function
- * Sends a prompt to OpenRouter and returns the response text
- */
-export async function callOpenRouter(prompt, imageBase64) {
+export async function callOpenRouter(messages) {
   const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "OpenRouter API key not found. Please add VITE_OPENROUTER_API_KEY to .env.local"
+      "OpenRouter API key not found. Please add VITE_OPENROUTER_API_KEY to .env"
     );
   }
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      // Optional: Helps with routing to better models if using 'auto'
-      "HTTP-Referer": window.location.origin, 
-    },
-    body: JSON.stringify({
-      model: "openrouter/auto",
-      // Lower temperature ensures more deterministic, structured formatting
-      temperature: 0.3, 
-      messages: [
-        {
-          role: "system",
-          // CRITICAL CHANGE: Stricter instructions for raw Markdown
-          content: `You are a Markdown content generator. 
-            1. Return the response in strict raw Markdown format.
-            2. Do NOT wrap the entire response in a code block (like \`\`\`markdown ... \`\`\`).
-            3. Use clear headers (#, ##), bullet points (-), and bold text (**) for structure.
-            4. Ensure distinct line breaks between paragraphs.`,
-        },
-        {
-          role: "user",
-          content: imageBase64
-            ? [
-                {
-                  type: "text",
-                  text: prompt,
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: imageBase64,
-                  },
-                },
-              ]
-            : prompt,
-        },
-      ],
-    }),
+  // Convert our chat format → OpenRouter format
+  const formattedMessages = messages.map((msg) => {
+    if (msg.role === "user" && msg.image) {
+      return {
+        role: "user",
+        content: [
+          { type: "text", text: msg.text },
+          {
+            type: "image_url",
+            image_url: { url: msg.image },
+          },
+        ],
+      };
+    }
+
+    return {
+      role: msg.role,
+      content: msg.text,
+    };
   });
+
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin,
+      },
+      body: JSON.stringify({
+        model: "openrouter/auto",
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content: `You are a Markdown content generator.
+            1. Return response in strict raw Markdown format.
+            2. Do NOT wrap entire response in a code block.
+            3. Use headers (#, ##), bullet points (-), and bold (**) properly.
+            4. Maintain clear spacing between sections.`,
+          },
+          ...formattedMessages,
+        ],
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errorData = await response.json();
@@ -62,6 +63,5 @@ export async function callOpenRouter(prompt, imageBase64) {
   }
 
   const data = await response.json();
-  // Ensure we return a string, even if the API returns null/undefined
   return data.choices?.[0]?.message?.content || "";
 }

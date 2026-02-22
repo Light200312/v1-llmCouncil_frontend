@@ -1,61 +1,109 @@
-import React, { useContext, useState } from 'react'
-import { Context } from '../../context/Context.jsx'
-import { Menu, Plus, MessageCircle, HelpCircle, History, Settings } from 'lucide-react'
-
+import React, { useState, useContext } from "react";
+import { Context } from "../../context/Context";
+import {
+  Menu,
+  Plus,
+  MessageCircle,
+  HelpCircle,
+  History,
+  Settings,
+} from "lucide-react";
 
 const Sidebar = () => {
+  const [extended, setExtended] = useState(true);
 
-    const [extended, setExtended] = useState(false)
-    const { prevPrompts, openRecentChat,newChat } = useContext(Context)
+  const { chats, currentChat, newChat, openChat } =
+    useContext(Context);
 
+  return (
+    <div
+      className={`h-screen ${
+        extended ? "w-64" : "w-20"
+      } flex flex-col justify-between bg-slate-100 dark:bg-slate-900 p-4 transition-all duration-300 hidden md:flex`}
+    >
+      {/* TOP SECTION */}
+      <div>
+        {/* MENU BUTTON */}
+        <button
+          onClick={() => setExtended((prev) => !prev)}
+          className="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition"
+        >
+          <Menu size={20} />
+        </button>
 
-
-    return (
-        <div className={`h-screen ${extended ? 'w-64' : 'w-20'} flex flex-col justify-between bg-slate-100 dark:bg-slate-900 p-6 hidden md:flex transition-all duration-300 overflow-hidden`}>
-            <div className="top">
-                <button onClick={() => setExtended(prev => !prev)} className='cursor-pointer ml-2 p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition flex-shrink-0'>
-                    <Menu size={20} />
-                </button>
-
-                <div onClick={()=>newChat()} className="mt-12 inline-flex items-center gap-2 p-2 bg-slate-200 dark:bg-slate-800 rounded-full text-sm text-gray-500 dark:text-gray-300 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition">
-                    <Plus size={20} className="flex-shrink-0" />
-                    {extended && <p className="text-sm">New Chat</p>}
-                </div>
-                {extended && (
-                    <div className="flex flex-col animate-fadeIn">
-                        <p className="mt-7 mb-5 font-medium text-gray-700 dark:text-gray-300">Recent</p>
-                        {prevPrompts.map((chat, index) => {
-                            return (
-                                <div
-                                    key={index}
-                                    onClick={() => openRecentChat(chat)}
-                                    className="flex items-start gap-2 p-2 rounded-full text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition text-sm"
-                                >
-                                    <MessageCircle size={20} className="flex-shrink-0" />
-                                    <p className="truncate">{chat.prompt.slice(0, 18)}...</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            <div className="flex flex-col gap-3">
-                <div className="flex items-start gap-2 p-2 rounded-full text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
-                    <HelpCircle size={20} className="flex-shrink-0" />
-                    {extended && <p className="text-sm">Help</p>}
-                </div>
-                <div className="flex items-start gap-2 p-2 rounded-full text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
-                    <History size={20} className="flex-shrink-0" />
-                    {extended && <p className="text-sm">Activity</p>}
-                </div>
-                <div className="flex items-start gap-2 p-2 rounded-full text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
-                    <Settings size={20} className="flex-shrink-0" />
-                    {extended && <p className="text-sm">Settings</p>}
-                </div>
-            </div>
+        {/* NEW CHAT */}
+        <div
+          onClick={newChat}
+          className="mt-8 flex items-center gap-3 p-2 bg-slate-200 dark:bg-slate-800 rounded-full cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+        >
+          <Plus size={20} />
+          {extended && <p className="text-sm">New Chat</p>}
         </div>
-    )
-}
 
-export default Sidebar
+        {/* RECENT CHATS */}
+        {extended && (
+          <div className="mt-8">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">
+              Recent
+            </p>
+
+            {chats.length === 0 && (
+              <p className="text-xs text-gray-400">
+                No chats yet
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {chats.map((chat) => {
+                const firstMessage =
+                  chat.messages?.find(
+                    (m) => m.role === "user"
+                  )?.text || "New Chat";
+
+                const isActive =
+                  currentChat?.id === chat.id;
+
+                return (
+                  <div
+                    key={chat.id}
+                    onClick={() => openChat(chat)}
+                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition ${
+                      isActive
+                        ? "bg-blue-500 text-white"
+                        : "hover:bg-slate-200 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <MessageCircle size={18} />
+                    <p className="truncate text-sm">
+                      {firstMessage.slice(0, 22)}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* BOTTOM SECTION */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+          <HelpCircle size={18} />
+          {extended && <p className="text-sm">Help</p>}
+        </div>
+
+        <div className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+          <History size={18} />
+          {extended && <p className="text-sm">Activity</p>}
+        </div>
+
+        <div className="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+          <Settings size={18} />
+          {extended && <p className="text-sm">Settings</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;
