@@ -1,15 +1,21 @@
-import { createContext, useState } from "react";
+import { createContext, useState, useEffect } from "react";
 import { callOpenRouter } from "../utils/openrouter";
-import { api } from "../api"; // Added API import for LLM logic
+import { api } from "../api"; 
+import axios from "axios";
 
 export const Context = createContext();
 
 const ContextProvider = ({ children }) => {
   // ==========================================
+  // AUTH STATE
+  // ==========================================
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem("council_user")) || null);
+
+  // ==========================================
   // NORMAL CHAT STATE
   // ==========================================
   const [input, setInput] = useState("");
-  const [PageView, setPageView] = useState("llm-chat"); // 'llm-chat' or 'normal-chat'
+  const [PageView, setPageView] = useState("llm-chat"); 
   const [loading, setLoading] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [currentChat, setCurrentChat] = useState({
@@ -19,7 +25,7 @@ const ContextProvider = ({ children }) => {
   const [chats, setChats] = useState([]);
 
   // ==========================================
-  // LLM CHAT STATE (Moved from LLMchat component)
+  // LLM COUNCIL STATE
   // ==========================================
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
@@ -27,84 +33,47 @@ const ContextProvider = ({ children }) => {
   const [isLLMLoading, setIsLLMLoading] = useState(false);
 
   // ==========================================
-  // NORMAL CHAT FUNCTIONS
+  // AUTH FUNCTIONS
   // ==========================================
-  const onSent = async (prompt, image = null) => {
-    if (!prompt && !image) return;
-
-    setShowResult(true);
-    setLoading(true);
-
-    const userMessage = { role: "user", text: prompt, image: image || null };
-    const updatedMessages = [...currentChat.messages, userMessage];
-
-    setCurrentChat({ id: currentChat.id, messages: updatedMessages });
-
+  const login = async (email, password) => {
     try {
-      const reply = await callOpenRouter(updatedMessages);
-      const words = reply.split(" ");
-      let typedText = "";
-
-      const maxDuration = 5000;
-      const delay = Math.max(10, Math.min(40, maxDuration / words.length));
-
-      setCurrentChat({
-        id: currentChat.id,
-        messages: [...updatedMessages, { role: "assistant", text: "" }],
-      });
-
-      for (let i = 0; i < words.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        typedText += words[i] + " ";
-        setCurrentChat({
-          id: currentChat.id,
-          messages: [...updatedMessages, { role: "assistant", text: typedText }],
-        });
-      }
-
-      const finalMessages = [...updatedMessages, { role: "assistant", text: reply }];
-      const updatedChat = { id: currentChat.id, messages: finalMessages };
-
-      setChats((prev) => {
-        const exists = prev.find((chat) => chat.id === updatedChat.id);
-        return exists
-          ? prev.map((chat) => (chat.id === updatedChat.id ? updatedChat : chat))
-          : [...prev, updatedChat];
-      });
+      const res = await axios.post("http://localhost:8001/api/auth/login", { email, password });
+      setUser(res.data);
+      localStorage.setItem("council_user", JSON.stringify(res.data));
+      return { success: true };
     } catch (err) {
-      setCurrentChat({
-        id: currentChat.id,
-        messages: [...updatedMessages, { role: "assistant", text: "Something went wrong." }],
-      });
+      return { success: false, message: err.response?.data?.detail || "Login failed" };
     }
-    setLoading(false);
   };
 
-  const newChat = () => {
-    if (currentChat.messages.length > 0 && !chats.find((chat) => chat.id === currentChat.id)) {
-      setChats((prev) => [...prev, currentChat]);
-    }
-    setCurrentChat({ id: Date.now(), messages: [] });
-    setShowResult(false);
-    setInput("");
-  };
-
-  const openChat = (chat) => {
-    setCurrentChat(chat);
-    setShowResult(true);
-  };
-
-  // ==========================================
-  // LLM CHAT FUNCTIONS
-  // ==========================================
-  const loadConversations = async () => {
+  const register = async (username, email, password) => {
     try {
-      const convs = await api.listConversations();
-      setConversations(convs);
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
+      await axios.post("http://localhost:8001/api/auth/register", { username, email, password });
+      return await login(email, password); 
+    } catch (err) {
+      return { success: false, message: err.response?.data?.detail || "Registration failed" };
     }
   };
+
+  const logout = () => {
+    setUser(null);
+    setConversations([]);
+    setCurrentConversation(null);
+    localStorage.removeItem("council_user");
+  };
+
+  // ==========================================
+  // LLM CHAT FUNCTIONS (Updated for MongoDB)
+  // ==========================================
+ const loadConversations = async () => {
+  if (!user?.id) return; // Use user.id from your login response
+  try {
+    const convs = await api.listConversations(user.id);
+    setConversations(convs);
+  } catch (error) {
+    console.error("Sidebar load failed:", error);
+  }
+};
 
   const loadConversation = async (id) => {
     try {
@@ -116,132 +85,180 @@ const ContextProvider = ({ children }) => {
   };
 
   const handleNewConversation = async () => {
+    if (!user) return;
     try {
-      const newConv = await api.createConversation();
-      setConversations([
-        { id: newConv.id, created_at: newConv.created_at, message_count: 0 },
-        ...conversations,
+      const newConv = await api.createConversation(user.id); // Pass user.id
+      setConversations((prev) => [
+        { id: newConv.id, created_at: newConv.created_at, message_count: 0, title: newConv.title },
+        ...prev,
       ]);
+      await loadConversations();
       setCurrentConversationId(newConv.id);
+      setCurrentConversation(newConv);
     } catch (error) {
       console.error("Failed to create conversation:", error);
     }
   };
+
+  // Auto-load sidebar when user changes
+  useEffect(() => {
+    if (user) loadConversations();
+  }, [user]);
+
+  // Load specific conversation content when ID changes
+  useEffect(() => {
+    if (currentConversationId) loadConversation(currentConversationId);
+  }, [currentConversationId]);
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
   };
 
   const handleSendLLMMessage = async (content) => {
-    if (!currentConversationId) return;
+    if (!currentConversationId || !user) return;
 
     setIsLLMLoading(true);
+    
     try {
       // Optimistically add user message to UI
-      const userMessage = { role: "user", content };
-      setCurrentConversation((prev) => ({
-        ...prev,
-        messages: [...prev.messages, userMessage],
-      }));
+     const baseConversation = currentConversation || { messages: [] };
+  const userMessage = { role: "user", content: content };
 
-      // Create a partial assistant message that will be updated progressively
+  // 1. Update UI with User Message
+  setCurrentConversation({
+    ...baseConversation,
+    messages: [...baseConversation.messages, userMessage]
+  });
+
+      // Initializing the complex multi-stage assistant object
       const assistantMessage = {
         role: "assistant",
         stage1: null,
         stage2: null,
         stage3: null,
         metadata: null,
-        loading: { stage1: false, stage2: false, stage3: false },
+        loading: { stage1: true, stage2: false, stage3: false },
       };
 
       setCurrentConversation((prev) => ({
         ...prev,
-        messages: [...prev.messages, assistantMessage],
+        messages: [...(prev?.messages || []), assistantMessage],
       }));
 
-      // Send message with streaming
+      // Streaming from Backend
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
-        switch (eventType) {
-          case "stage1_start":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].loading.stage1 = true;
-              return { ...prev, messages };
-            });
-            break;
-          case "stage1_complete":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].stage1 = event.data;
-              messages[messages.length - 1].loading.stage1 = false;
-              return { ...prev, messages };
-            });
-            break;
-          case "stage2_start":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].loading.stage2 = true;
-              return { ...prev, messages };
-            });
-            break;
-          case "stage2_complete":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].stage2 = event.data;
-              messages[messages.length - 1].metadata = event.metadata;
-              messages[messages.length - 1].loading.stage2 = false;
-              return { ...prev, messages };
-            });
-            break;
-          case "stage3_start":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].loading.stage3 = true;
-              return { ...prev, messages };
-            });
-            break;
-          case "stage3_complete":
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              messages[messages.length - 1].stage3 = event.data;
-              messages[messages.length - 1].loading.stage3 = false;
-              return { ...prev, messages };
-            });
-            break;
-          case "title_complete":
-          case "complete":
-            loadConversations();
-            if (eventType === "complete") setIsLLMLoading(false);
-            break;
-          case "error":
-            console.error("Stream error:", event.message);
-            setIsLLMLoading(false);
-            break;
-          default:
-            console.log("Unknown event type:", eventType);
-        }
+        setCurrentConversation((prev) => {
+          const messages = [...prev.messages];
+          const lastIdx = messages.length - 1;
+
+          switch (eventType) {
+            case "stage1_complete":
+              messages[lastIdx].stage1 = event.data;
+              messages[lastIdx].loading.stage1 = false;
+              messages[lastIdx].loading.stage2 = true;
+              break;
+            case "stage2_complete":
+              messages[lastIdx].stage2 = event.data;
+              messages[lastIdx].metadata = event.metadata;
+              messages[lastIdx].loading.stage2 = false;
+              messages[lastIdx].loading.stage3 = true;
+              break;
+            case "stage3_complete":
+              messages[lastIdx].stage3 = event.data;
+              messages[lastIdx].loading.stage3 = false;
+              break;
+            case "title_complete":
+              loadConversations(); // Refresh sidebar title
+              break;
+            case "complete":
+              setIsLLMLoading(false);
+              break;
+            case "error":
+              setIsLLMLoading(false);
+              break;
+          }
+          return { ...prev, messages };
+        });
       });
     } catch (error) {
       console.error("Failed to send message:", error);
-      setCurrentConversation((prev) => ({
-        ...prev,
-        messages: prev.messages.slice(0, -2),
-      }));
       setIsLLMLoading(false);
     }
   };
 
+  // ==========================================
+  // NORMAL CHAT FUNCTIONS (Stayed similar)
+  // ==========================================
+const onSent = async (prompt, image = null) => {
+    if (!prompt && !image) return;
+
+    // 1. Create User Message
+    const userMessage = { role: "user", text: prompt, image: image };
+
+    // 2. Add to UI immediately
+    setCurrentChat(prev => ({
+        ...prev,
+        messages: [...prev.messages, userMessage]
+    }));
+
+    setLoading(true);
+    setInput("");
+
+    try {
+        // 3. Use the callOpenRouter function you provided
+        // We pass the entire history including the new message
+        const history = [...currentChat.messages, userMessage];
+        const response = await callOpenRouter(history);
+
+        const botMessage = { role: "assistant", text: response };
+
+        // 4. Update Chat with Bot Response
+        setCurrentChat(prev => {
+            const updatedChat = {
+                ...prev,
+                messages: [...prev.messages, botMessage]
+            };
+            
+            // 5. Update the sidebar history list
+            setChats(prevChats => {
+                const exists = prevChats.find(c => c.id === updatedChat.id);
+                if (exists) {
+                    return prevChats.map(c => c.id === updatedChat.id ? updatedChat : c);
+                }
+                return [updatedChat, ...prevChats];
+            });
+
+            return updatedChat;
+        });
+
+    } catch (error) {
+        console.error("OpenRouter Error:", error);
+    } finally {
+        setLoading(false);
+    }
+};
+
+const newChat = () => {
+    setPageView("normal-chat"); // Force switch to normal view
+    setCurrentChat({ id: Date.now(), messages: [] });
+    setShowResult(false);
+    setInput("");
+};
+
+  const openChat = (chat) => {
+    setCurrentChat(chat);
+    setShowResult(true);
+  };
+
   const value = {
-    // Normal Chat Values
+    user, login, register, logout,
     input, setInput,
     loading, showResult, setShowResult,
     onSent, currentChat, chats,
     newChat, openChat,
     PageView, setPageView,
-    
-    // LLM Chat Values
     conversations, currentConversationId, currentConversation, isLLMLoading,
-    loadConversations, loadConversation, handleNewConversation, handleSelectConversation, handleSendLLMMessage
+    loadConversations ,loadConversation, handleNewConversation, handleSelectConversation, handleSendLLMMessage
   };
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

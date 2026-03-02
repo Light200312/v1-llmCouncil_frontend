@@ -3,7 +3,7 @@ import React from 'react'
 const Test = () => {
   return (
     <div>
-      for testing.....
+      testing...
     </div>
   )
 }
